@@ -1,0 +1,257 @@
+<html>
+<head>
+	<title> JSON LOADING TEST </title>
+	<script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
+  	<script src="//code.jquery.com/jquery-migrate-1.2.1.min.js"></script>
+	<script type="text/javascript" src="http://mbostock.github.com/d3/d3.js?2.6.0"></script>
+   <script type="text/javascript" src="http://mbostock.github.com/d3/d3.layout.js?2.6.0"></script>
+   <script type="text/javascript" src="http://mbostock.github.com/d3/d3.geom.js?2.6.0"></script>
+	<script type="text/javascript">
+		var nodeData = [];
+		var dbLoaded = false;
+		var jCount = {};
+		$.ajax( {url:"posts.db", 
+					success:function(data){
+						console.log(data);
+						var sData = data;
+						var rpcData = sData.split(/(\r\n|\n|\r)/gm);
+						var count = 0;
+						
+						for( var i = 0 ; i < rpcData.length ; i++){
+							if( rpcData[i].length > 4){
+								var tmpJSON = JSON.parse(rpcData[i]);
+								var added = false;
+								for( var j = 0 ; j < nodeData.length ; j++){
+									if( nodeData[j].name == tmpJSON.name){
+										console.log("FOUND DUPLICATE");
+										added = true;
+										if( tmpJSON.friends.length > nodeData[j].friends.length){
+											console.log("UPDATE TO DUPLICATE");
+											nodeData[j] = tmpJSON;
+											j = nodeData.length+10;
+										}
+									}
+								}
+								if( added == false){
+									var jsonD = JSON.parse(rpcData[i]);
+									jsonD.count = count;
+									jCount[jsonD.name] = count;
+									count++;
+									nodeData.push(JSON.parse(rpcData[i]));
+								}
+							}
+						}
+
+
+						console.log(nodeData);
+						console.log("DB LOADED:",jCount);
+						startGraph();
+					}
+				});
+
+		function startGraph(){
+			drawForceGraph();
+		}
+
+
+		function drawForceGraph(){
+			var w = 960, h = 960;
+  		 	var labelDistance = 0;
+
+   		var vis = d3.select("body").append("svg:svg").attr("width", w).attr("height", h);
+
+		   var nodes = [];
+  			var labelAnchors = [];
+   		var labelAnchorLinks = [];
+   		var links = [];
+			
+			console.log( nodeData.length);
+
+   		for(var i = 0; i < nodeData.length; i++) {
+      		var node = {
+         		label : nodeData[i].name,
+					fblink  : nodeData[i].fblink,
+					friends : nodeData[i].friends
+     			};
+      		nodes.push(node);
+      		labelAnchors.push({
+         		node : node
+      		});
+     		 	labelAnchors.push({
+         		node : node
+      		});
+   		};
+			console.log("Nodes:", nodes);	
+			/**
+   		for(var i = 0; i < nodes.length; i++) {
+      	/*	for(var j = 0; j < i; j++) {
+         		if(Math.random() > .95)
+            		links.push({
+               		source : i,
+               		target : j,
+               		weight : Math.random()
+            		});
+         	}
+         	labelAnchorLinks.push({
+            	source : i * 2,
+           	 	target : i * 2 + 1,
+            	weight : 1
+         	});
+      	};*/
+			var jLinks = {};
+			for( var i = 0 ; i < nodes.length ; i++){
+				var fs = nodes[i].friends;
+				var from = jCount[nodes[i].label];
+				console.log("FS", nodes[i].label, nodes[i].friends);		
+				for( var j = 0 ; j < nodes[i].friends.length ; j++){
+					var name = nodes[i].friends[j]['name'];
+					var to = jCount[name];
+					console.log("link from:", from," to ",to);
+					if( from > to ){
+						var tmp = from;
+						from = to;
+						to = tmp
+					}
+					if( jLinks[from] == null){
+						jLinks[from] = [to];	
+					}else{
+						var too = jLinks[from];
+						var added = false;	
+						for( var k = 0 ; k < too.length ; k++){
+							if( too[k] == to){
+								added = true; 
+								k = too.legnth;
+							}
+						}
+						if( added == false){
+							too[too.length] = to;
+							jLinks[from] = too;
+						}
+					}
+				}
+			}
+			
+			console.log("JLink:", jLinks);
+			for( var kk  in jLinks){
+				var arr = jLinks[kk];
+				for( var amg = 0 ; amg < arr.length ; amg++){
+					console.log("jlink from", typeof kk,"to", typeof arr[amg]);
+					if( arr[amg] ){
+					links.push({
+						source : parseInt(kk),
+						target : arr[amg],
+						weight:Math.random()
+					});
+					}
+				}
+			}
+
+			/*	
+			for( var z = 0 ; z < jLinks.length ; z++){
+				console.log("J[z]:", typeof jLinks[z], jLink[z]);
+				for( var n = 0 ; n < jLinks[z].length ; n++){
+					console.log("add link from",z,"to",jLinks[z][n]);
+					links.push({
+						source: z,
+						target: jLinks[z][n],
+						weight:Math.random()
+					});
+				}
+			}
+			*/
+			
+   		for(var i = 0; i < nodes.length; i++) {
+      	/*	for(var j = 0; j < i; j++) {
+         		if(Math.random() > .95)
+            		links.push({
+               		source : i,
+               		target : j,
+               		weight : Math.random()
+            		});
+         	}*/
+         	labelAnchorLinks.push({
+            	source : i * 2,
+           	 	target : i * 2 + 1,
+					weight : 1
+				});
+			};
+      	var force = d3.layout.force().size([w, h]).nodes(nodes).links(links).gravity(1).linkDistance(50).charge(-3000).linkStrength(function(x) {
+      		return x.weight * 10
+   		});
+
+			console.log("Links:", links);
+   		force.start();
+
+   		var force2 = d3.layout.force().nodes(labelAnchors).links(labelAnchorLinks).gravity(0).linkDistance(0).linkStrength(8).charge(-100).size([w, h]);
+   		force2.start();
+
+   		var link = vis.selectAll("line.link").data(links).enter().append("svg:line").attr("class", "link").style("stroke", "#CCC");
+
+   		var node = vis.selectAll("g.node").data(force.nodes()).enter().append("svg:g").attr("class", "node");
+   		node.append("svg:circle").attr("r", 5).style("fill", "#555").style("stroke", "#FFF").style("stroke-width", 3);
+   		node.call(force.drag);
+
+
+   		var anchorLink = vis.selectAll("line.anchorLink").data(labelAnchorLinks)//.enter().append("svg:line").attr("class", "anchorLink").style("stroke", "#999");
+
+   		var anchorNode = vis.selectAll("g.anchorNode").data(force2.nodes()).enter().append("svg:g").attr("class", "anchorNode");
+   		anchorNode.append("svg:circle").attr("r", 0).style("fill", "#FFF");
+   		anchorNode.append("svg:text").text(function(d, i) {
+      		return i % 2 == 0 ? "" : d.node.label
+   		}).style("fill", "#555").style("font-family", "Arial").style("font-size", 12);
+			var updateLink = function() {                                                                                                                         
+				this.attr("x1", function(d) {                                                                                                        
+			   	return d.source.x;                                                                                                              
+				}).attr("y1", function(d) {                                                                                                                          
+					return d.source.y;                                                                                                                                   
+				}).attr("x2", function(d) {                                                                                                                         
+					return d.target.x;                                                                                                              
+				 }).attr("y2", function(d) {                                                                                                                   
+					return d.target.y;                                                                                                                        
+				});                                                                                                                                                 
+			}   
+			var updateNode = function() {                                                                                                                      
+				this.attr("transform", function(d) {                                                                                                                    
+					return "translate(" + d.x + "," + d.y + ")";                                                                                                        
+				});                                                                                                                                       
+        	}                                                                                                                                                  
+			force.on("tick", function() {                                                                                                                              
+				force2.start();                                                                                                                                            
+				node.call(updateNode);                                                                                                                                  
+				anchorNode.each(function(d, i) {                                                                                                                    
+					if(i % 2 == 0) {                                                                                                                                 
+			   		d.x = d.node.x;                                                                                                                               
+						d.y = d.node.y;                                                                                                                                  
+					} else {                                                                                                                                       
+						var b = this.childNodes[1].getBBox();                                                                                                               
+						var diffX = d.x - d.node.x;                                                                                                                       
+						var diffY = d.y - d.node.y;                                                                                                                     
+						var dist = Math.sqrt(diffX * diffX + diffY * diffY);                                                                                               
+						var shiftX = b.width * (diffX - dist) / (dist * 2);                                                                                         
+						shiftX = Math.max(-b.width, Math.min(0, shiftX));                                                                                              
+						var shiftY = 5;                                                                                                                                 
+						this.childNodes[1].setAttribute("transform", "translate(" + shiftX + "," + shiftY + ")");
+					} 	                                                                                                    
+				}); 
+				anchorNode.call(updateNode);                                                                                                          
+				link.call(updateLink);                                                                                                                              
+				anchorLink.call(updateLink);                                                                                                                         
+			});                     
+		}
+	
+
+
+	</script>
+
+
+</head>
+
+<body>
+
+
+	
+
+
+</body>
+
+</html>
